@@ -1,0 +1,219 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frausto Sistemas - Recepción</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f1f4f8;color:#172033;font-family:Arial,sans-serif}
+header{background:#101d32;color:white;padding:20px;text-align:center}
+header h2{margin:0;color:#fff}
+header p{margin:7px 0 0;color:#b9d4ed}
+main{max-width:850px;margin:20px auto;padding:15px}
+.card{background:white;padding:20px;border-radius:13px;margin-bottom:18px;box-shadow:0 3px 12px #0001}
+h3{margin-top:0;color:#1264a3}
+input,select,textarea{width:100%;padding:12px;margin:7px 0 14px;border:1px solid #ccd4df;border-radius:7px;font-size:16px}
+textarea{min-height:75px}
+button{background:#0878c9;color:white;border:0;border-radius:8px;padding:13px 18px;font-size:16px;font-weight:bold;cursor:pointer;width:100%;margin:5px 0}
+button.secondary{background:#26374d}
+.hidden{display:none}
+#mensaje{padding:12px;border-radius:7px;margin:10px 0;display:none}
+.ticket{border:1px dashed #777;padding:15px;margin-top:15px}
+small{color:#65748b}
+</style>
+</head>
+<body>
+<header>
+<h2>FRAUSTO SISTEMAS</h2>
+<p>Recepción y reparación de equipos</p>
+</header>
+
+<main>
+<section id="login" class="card">
+<h3>Acceso administrativo</h3>
+<label>Correo electrónico</label>
+<input id="email" type="email" placeholder="Tu correo">
+<label>Contraseña</label>
+<input id="password" type="password" placeholder="Tu contraseña">
+<button onclick="entrar()">Iniciar sesión</button>
+</section>
+
+<section id="sistema" class="hidden">
+<div class="card">
+<h3>Recepción de equipo</h3>
+<p id="usuario"></p>
+<button class="secondary" onclick="salir()">Cerrar sesión</button>
+</div>
+
+<div class="card">
+<h3>Datos del cliente</h3>
+<label>Nombre del cliente</label>
+<input id="nombre" placeholder="Nombre completo">
+<label>Teléfono</label>
+<input id="telefono" type="tel" placeholder="Número de teléfono">
+</div>
+
+<div class="card">
+<h3>Datos del equipo</h3>
+<label>Tipo de equipo</label>
+<select id="equipo">
+<option>Celular</option>
+<option>Tablet</option>
+<option>Computadora</option>
+<option>Laptop</option>
+<option>Otro</option>
+</select>
+<label>Marca</label>
+<input id="marca" placeholder="Marca">
+<label>Modelo</label>
+<input id="modelo" placeholder="Modelo">
+<label>Número de serie</label>
+<input id="serie" placeholder="Número de serie">
+<label>Falla reportada</label>
+<textarea id="reportes" placeholder="Describe la falla"></textarea>
+<label>Accesorios recibidos</label>
+<textarea id="accesories" placeholder="Cargador, funda, etc."></textarea>
+<label>Diagnóstico</label>
+<textarea id="diagnostic" placeholder="Diagnóstico del equipo"></textarea>
+<label>Reparación</label>
+<textarea id="repair" placeholder="Trabajo por realizar"></textarea>
+<label>Estado</label>
+<select id="status">
+<option>Recibido</option>
+<option>En revisión</option>
+<option>En reparación</option>
+<option>Listo</option>
+<option>Entregado</option>
+</select>
+<label>Presupuesto</label>
+<input id="estimate" type="number" min="0" placeholder="0">
+<label>Costo final</label>
+<input id="final_cost" type="number" min="0" placeholder="0">
+<button onclick="guardar()">Guardar recepción</button>
+<div id="mensaje"></div>
+<div id="ticket"></div>
+</div>
+</section>
+</main>
+
+<script>
+const SUPABASE_URL = "https://ihflcyhrnmoyeyqeomgu.supabase.co";
+const SUPABASE_KEY = "sb_publishable_IZFwkGLolZqvLonuEJmN0A_1IIhDUdT";
+const db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+function aviso(texto){
+ const m=document.getElementById("mensaje");
+ m.style.display="block";
+ m.textContent=texto;
+}
+
+async function revisarSesion(){
+ const {data}=await db.auth.getSession();
+ if(data.session) mostrarSistema(data.session.user);
+}
+
+function mostrarSistema(user){
+ document.getElementById("login").classList.add("hidden");
+ document.getElementById("sistema").classList.remove("hidden");
+ document.getElementById("usuario").textContent="Sesión: "+user.email;
+}
+
+async function entrar(){
+ const email=document.getElementById("email").value.trim();
+ const password=document.getElementById("password").value;
+ const {data,error}=await db.auth.signInWithPassword({email,password});
+ if(error){alert("No se pudo iniciar sesión: "+error.message);return;}
+ mostrarSistema(data.user);
+}
+
+async function salir(){
+ await db.auth.signOut();
+ location.reload();
+}
+
+async function guardar(){
+ const {data:{user}}=await db.auth.getUser();
+ if(!user){alert("Inicia sesión nuevamente");return;}
+
+ const nombre=document.getElementById("nombre").value.trim();
+ const telefono=document.getElementById("telefono").value.trim();
+ if(!nombre || !telefono){
+  alert("Escribe el nombre y teléfono del cliente");
+  return;
+ }
+
+ const boton=document.querySelector("#sistema button:not(.secondary)");
+ boton.disabled=true;
+ boton.textContent="Guardando...";
+
+ try{
+  const {data:cliente,error:errorCliente}=await db
+   .from("fs_clients")
+   .insert({name:nombre,phone:telefono,created_by:user.id})
+   .select("id")
+   .single();
+
+  if(errorCliente) throw errorCliente;
+
+  const orden={
+   client_id:cliente.id,
+   device:document.getElementById("equipo").value,
+   brand:document.getElementById("marca").value,
+   model:document.getElementById("modelo").value,
+   serial:document.getElementById("serie").value,
+   reportes:document.getElementById("reportes").value,
+   accesories:document.getElementById("accesories").value,
+   diagnostic:document.getElementById("diagnostic").value,
+   repair:document.getElementById("repair").value,
+   status:document.getElementById("status").value,
+   estimate:Number(document.getElementById("estimate").value)||0,
+   final_cost:Number(document.getElementById("final_cost").value)||0,
+   created_by:user.id
+  };
+
+  const {data:ordenGuardada,error:errorOrden}=await db
+   .from("fs_repair_orders")
+   .insert(orden)
+   .select("folio")
+   .single();
+
+  if(errorOrden) throw errorOrden;
+
+  const folio="FS-"+String(ordenGuardada.folio).padStart(4,"0");
+  aviso("¡Recepción guardada correctamente! Folio: "+folio);
+
+  document.getElementById("ticket").innerHTML=
+   '<div class="ticket"><h3>FRAUSTO SISTEMAS</h3>'+
+   '<h2>'+folio+'</h2><p>Cliente: '+seguro(nombre)+'</p>'+
+   '<p>Teléfono: '+seguro(telefono)+'</p>'+
+   '<p>Equipo: '+seguro(orden.device)+' '+seguro(orden.brand)+' '+seguro(orden.model)+'</p>'+
+   '<p>Falla: '+seguro(orden.reportes)+'</p>'+
+   '<p>Accesorios: '+seguro(orden.accesories)+'</p>'+
+   '<p>Estado: '+seguro(orden.status)+'</p>'+
+   '<button onclick="window.print()">Imprimir</button></div>';
+
+ }catch(error){
+  aviso("Error al guardar: "+error.message);
+ }finally{
+  boton.disabled=false;
+  boton.textContent="Guardar recepción";
+ }
+}
+
+function seguro(valor){
+ const d=document.createElement("div");
+ d.textContent=valor||"";
+ return d.innerHTML;
+}
+
+db.auth.onAuthStateChange((event,session)=>{
+ if(session) mostrarSistema(session.user);
+});
+
+revisarSesion();
+</script>
+</body>
+</html>
